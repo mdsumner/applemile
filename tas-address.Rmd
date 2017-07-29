@@ -1,0 +1,51 @@
+---
+title: "Tas address"
+author: "Michael Sumner"
+date: "29/07/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}i
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r local-govt-areas}
+library(raadfiles)
+library(dplyr)
+library(sf)
+library(raster)
+maps <- raadfiles::thelist_files(pattern = "local_govt_areas") %>% dplyr::filter(grepl("tab$", fullname)) %>% pull(fullname) %>% purrr::map(sf::read_sf) 
+lga <- do.call(rbind, maps)
+plot(lga[, "NAME"])
+```
+
+```{r address}
+addr <- "120 Carlton Beach Road Dodges Ferry Tasmania 7173"
+geo <- dismo::geocode(addr)
+geo2 <- geo
+library(sp)
+coordinates(geo2) <- c("longitude", "latitude")
+proj4string(geo2) <- CRS("+init=epsg:4326")
+
+
+lganame <- sp::over(spTransform(geo2,sf::st_crs(lga)$proj4string),as(lga, "Spatial"))$NAME
+
+```
+
+Now read the cadastre. 
+
+```{r}
+parcel <- raadfiles::thelist_files(pattern = "parcel") %>% dplyr::filter(grepl("tab$", fullname), grepl(tolower(lganame), fullname)) %>% pull(fullname) %>% purrr::map(sf::read_sf) 
+
+parcel <- do.call(rbind, parcel)
+
+
+ext <- rep(c(coordinates(spTransform(geo2,sf::st_crs(lga)$proj4string))), each = 2) + c(-1, 1, -1, 1) * 200
+parcel <- parcel[unlist(sf::st_intersects(st_as_sf(spex::spex(extent(ext), crs =st_crs(lga)$proj4string)), parcel)), ]
+
+```
+
+```{r}
+library(mapview)
+mapview(parcel)
+```
